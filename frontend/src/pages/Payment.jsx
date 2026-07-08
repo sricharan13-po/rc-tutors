@@ -4,22 +4,6 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { Lock, CheckCircle, ChevronLeft, Video, Calendar, Clock, AlertCircle } from 'lucide-react'
 
-// Video classes run on Jitsi Meet — free, no account, no app, works in any browser.
-// The room name is derived from a secret salt so it CAN'T be guessed from the class name.
-const ROOM_SALT = 'rc-tutors-9f83kd72ba-secret'
-
-function hashCode(str) {
-  let h = 0
-  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
-  return (h >>> 0).toString(36)
-}
-
-function classRoomUrl(tier) {
-  const a = hashCode(ROOM_SALT + '|' + tier)
-  const b = hashCode(tier + '|' + ROOM_SALT + '|x')
-  return `https://meet.jit.si/RCTutors-${a}${b}`
-}
-
 // Load the Razorpay checkout script once
 function loadRazorpayScript() {
   return new Promise((resolve) => {
@@ -40,9 +24,9 @@ export default function Payment() {
   const tier = params.get('tier') || 'Lower Primary'
   const price = parseInt(params.get('price') || '1250')
   const grades = params.get('grades') || '1 – 2'
-  const meetLink = classRoomUrl(tier)
 
   const [paid, setPaid] = useState(false)
+  const [meetLink, setMeetLink] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [configured, setConfigured] = useState(null) // null = checking
@@ -52,15 +36,6 @@ export default function Payment() {
       .then((r) => setConfigured(r.data.configured))
       .catch(() => setConfigured(false))
   }, [])
-
-  const saveEnrollment = () => {
-    const existing = JSON.parse(localStorage.getItem('rc_enrollments') || '[]')
-    localStorage.setItem('rc_enrollments', JSON.stringify([...existing, {
-      id: Date.now(), tier, price, grades, meetLink,
-      schedule: 'Monday – Friday · 5:10 PM – 6:10 PM',
-      paidAt: new Date().toISOString(),
-    }]))
-  }
 
   const handlePay = async () => {
     setError('')
@@ -83,15 +58,16 @@ export default function Payment() {
         prefill: { name: user?.name || '', email: user?.email || '' },
         theme: { color: '#6C63FF' },
         handler: async (response) => {
-          // 3. Verify the payment signature on the backend
+          // 3. Verify the payment signature on the backend — the server records the
+          // payment and creates the enrollment; it's the single source of truth.
           try {
-            await api.post('/payments/verify', {
+            const { data } = await api.post('/payments/verify', {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               tier, price, grades,
             })
-            saveEnrollment()
+            setMeetLink(data.enrollment?.meetLink || '')
             setPaid(true)
           } catch {
             setError('Payment could not be verified. If money was deducted, please contact us.')

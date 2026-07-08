@@ -6,11 +6,23 @@ services:
     buildCommand: npm --prefix frontend install && npm --prefix frontend run build && npm --prefix mock-server install
     startCommand: node mock-server/server.js
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: JWT_SECRET
         generateValue: true
-      # Optional — add your Razorpay TEST keys to enable real checkout.
-      # Leave blank to keep payments in "not configured" (safe) mode.
+      # Persistent database (MongoDB Atlas free tier). Without this, data resets
+      # whenever the free instance restarts. See README for setup steps.
+      - key: MONGO_URI
+        sync: false
+      # Razorpay keys — use rzp_live_... keys only once your account is approved
+      # for Live Mode. Test keys (rzp_test_...) are fine for trying things out.
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
+        sync: false
+      # From Razorpay Dashboard → Settings → Webhooks, after adding the webhook URL.
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # Lock the API to your real domain once you have one, e.g. https://rctutors.com
+      - key: CORS_ORIGIN
         sync: false

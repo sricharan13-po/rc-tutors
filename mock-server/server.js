@@ -1,19 +1,25 @@
 const express = require('express')
 const cors = require('cors')
+const helmet = require('helmet')
+const rateLimit = require('express-rate-limit')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const Razorpay = require('razorpay')
+const db = require('./db')
 
 const app = express()
-app.use(cors())
-app.use(express.json())
+app.set('trust proxy', 1) // needed on Render/most PaaS for rate-limit + secure cookies to see the real client IP
 
 const PORT = process.env.PORT || 8000
 const SECRET = process.env.JWT_SECRET || 'rc-tutors-secret'
-const DB_FILE = path.join(__dirname, 'db.json')
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'
+const isProd = process.env.NODE_ENV === 'production'
+
+app.use(helmet({ contentSecurityPolicy: false }))
+app.use(cors({ origin: CORS_ORIGIN }))
 
 // Serve the built React frontend (for single-service deployment)
 const CLIENT_DIST = path.join(__dirname, '..', 'frontend', 'dist')
@@ -22,10 +28,12 @@ if (fs.existsSync(CLIENT_DIST)) {
 }
 
 // ── RAZORPAY KEYS ───────────────────────────────────────
-// 👉 PASTE YOUR RAZORPAY TEST KEYS HERE (from Razorpay Dashboard → Test Mode → API Keys).
-//    Key ID starts with "rzp_test_...". You can also set them as env vars.
+// 👉 Set these as environment variables (Razorpay Dashboard → API Keys).
+//    Test mode: keys start with "rzp_test_...". Live mode: "rzp_live_...".
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_XXXXXXXXXXXXXX'
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'YOUR_TEST_KEY_SECRET'
+// Set in Razorpay Dashboard → Settings → Webhooks when you add the webhook URL.
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || ''
 
 const razorpayConfigured =
   RAZORPAY_KEY_ID !== 'rzp_test_XXXXXXXXXXXXXX' && RAZORPAY_KEY_SECRET !== 'YOUR_TEST_KEY_SECRET'
@@ -34,28 +42,62 @@ const razorpay = razorpayConfigured
   ? new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET })
   : null
 
-// Load persisted data or start fresh
-function loadDB() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'))
-    }
-  } catch {}
-  return { users: [], nextId: 1 }
+// Video classes run on Jitsi Meet. The room name is derived from a secret salt
+// so it can't be guessed from the class name — must match frontend/src/pages/Payment.jsx.
+const ROOM_SALT = process.env.ROOM_SALT || 'rc-tutors-9f83kd72ba-secret'
+function hashCode(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+function classRoomUrl(tier) {
+  const a = hashCode(ROOM_SALT + '|' + tier)
+  const b = hashCode(tier + '|' + ROOM_SALT + '|x')
+  return `https://meet.jit.si/RCTutors-${a}${b}`
 }
 
-function saveDB() {
+// ── RAZORPAY WEBHOOK ─────────────────────────────────────
+// Registered BEFORE express.json() because signature verification needs the raw body.
+// This is the authoritative payment record: it fires from Razorpay's servers directly,
+// so a payment is captured here even if the customer's browser closes right after paying.
+app.post('/payments/webhook', express.raw({ type: '*/*' }), async (req, res) => {
+  if (!RAZORPAY_WEBHOOK_SECRET) return res.status(503).json({ detail: 'Webhook not configured.' })
+
+  const signature = req.headers['x-razorpay-signature'] || ''
+  const expected = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET).update(req.body).digest('hex')
+  if (signature !== expected) return res.status(400).json({ detail: 'Invalid webhook signature.' })
+
+  let event
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ users, nextId }, null, 2))
-  } catch (e) {
-    // Some hosts have a read-only/ephemeral disk — keep running with in-memory data.
-    console.warn('Could not persist db.json:', e.message)
+    event = JSON.parse(req.body.toString('utf8'))
+  } catch {
+    return res.status(400).json({ detail: 'Malformed payload.' })
   }
-}
 
-const db = loadDB()
-const users = db.users
-let nextId = db.nextId
+  if (event.event === 'payment.captured') {
+    const payment = event.payload?.payment?.entity
+    if (payment) {
+      await recordPaidOrder({
+        student_id: parseInt(payment.notes?.student_id) || null,
+        order_id: payment.order_id,
+        payment_id: payment.id,
+        tier: payment.notes?.tier || '',
+        price: payment.amount / 100,
+        grades: payment.notes?.grades || '',
+        source: 'webhook',
+      })
+    }
+  }
+
+  res.json({ received: true })
+})
+
+app.use(express.json())
+
+// ── RATE LIMITING ────────────────────────────────────────
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false })
+const paymentLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false })
+const enquiryLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false })
 
 const DEFAULT_TUTORS = [
   {
@@ -89,13 +131,13 @@ function userOut(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role, avatar_url: null, created_at: user.created_at }
 }
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const auth = req.headers.authorization || ''
   const token = auth.replace('Bearer ', '')
   if (!token) return res.status(401).json({ detail: 'Not authenticated' })
   try {
     const payload = jwt.verify(token, SECRET)
-    const user = users.find(u => u.id === parseInt(payload.sub))
+    const user = await db.findUserById(parseInt(payload.sub))
     if (!user) return res.status(401).json({ detail: 'User not found' })
     req.user = user
     next()
@@ -104,8 +146,33 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Shared by /payments/verify (browser) and /payments/webhook (Razorpay server).
+// Idempotent on order_id so a payment is never recorded — or enrolled — twice.
+async function recordPaidOrder({ student_id, order_id, payment_id, tier, price, grades, source }) {
+  const existing = await db.findPaymentByOrderId(order_id)
+  if (existing) return { payment: existing, alreadyRecorded: true }
+
+  const payment = await db.savePayment({
+    student_id, order_id, payment_id, tier, price: Number(price) || 0, grades,
+    status: 'paid', source, created_at: new Date().toISOString(),
+  })
+
+  let enrollment = null
+  if (student_id) {
+    enrollment = await db.saveEnrollment({
+      student_id, order_id, tier, price: Number(price) || 0, grades,
+      meetLink: classRoomUrl(tier),
+      schedule: 'Monday – Friday · 5:10 PM – 6:10 PM',
+      paidAt: new Date().toISOString(),
+    })
+  }
+
+  if (!isProd) console.log('Payment recorded:', payment)
+  return { payment, enrollment, alreadyRecorded: false }
+}
+
 // ── AUTH ──────────────────────────────────────────────
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register', authLimiter, async (req, res) => {
   const { name, email, password, role } = req.body
 
   if (!name || name.trim().length < 2)
@@ -115,25 +182,23 @@ app.post('/auth/register', async (req, res) => {
   if (!password || password.length < 6)
     return res.status(422).json({ detail: 'Password must be at least 6 characters.' })
 
-  if (users.find(u => u.email === email))
+  if (await db.findUserByEmail(email))
     return res.status(400).json({ detail: 'An account with this email already exists.' })
 
   const hash = await bcrypt.hash(password, 10)
-  const user = { id: nextId++, name: name.trim(), email, password_hash: hash, role: role || 'student', created_at: new Date().toISOString() }
-  users.push(user)
-  saveDB()
+  const user = await db.createUser({ name: name.trim(), email, password_hash: hash, role: role || 'student' })
 
   const token = makeToken(user)
   res.status(201).json({ access_token: token, token_type: 'bearer', user: userOut(user) })
 })
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body
 
   if (!email || !password)
     return res.status(422).json({ detail: 'Email and password are required.' })
 
-  const user = users.find(u => u.email === email)
+  const user = await db.findUserByEmail(email)
   if (!user)
     return res.status(401).json({ detail: 'No account found with this email.' })
 
@@ -164,67 +229,7 @@ app.get('/tutors/:id', (req, res) => {
   res.json(tutor)
 })
 
-// ── BOOKINGS ────────────────────────────────────────────
-const bookings = []
-let bookingId = 1
-
-app.post('/bookings', authMiddleware, (req, res) => {
-  const { tutor_id, start_time, end_time, subject } = req.body
-  const tutor = DEFAULT_TUTORS.find(t => t.id === tutor_id)
-  if (!tutor) return res.status(404).json({ detail: 'Tutor not found' })
-
-  const hours = (new Date(end_time) - new Date(start_time)) / 3600000
-  const booking = {
-    id: bookingId++, student_id: req.user.id, tutor_id,
-    start_time, end_time, subject,
-    status: 'pending', payment_status: 'unpaid',
-    amount: Math.round(tutor.profile.hourly_rate * hours * 100) / 100,
-    stripe_payment_intent_id: null
-  }
-  bookings.push(booking)
-  res.status(201).json(booking)
-})
-
-app.get('/bookings', authMiddleware, (req, res) => {
-  const user = req.user
-  const result = bookings.filter(b => b.student_id === user.id || b.tutor_id === user.id)
-  res.json(result)
-})
-
-app.patch('/bookings/:id', authMiddleware, (req, res) => {
-  const b = bookings.find(b => b.id === parseInt(req.params.id))
-  if (!b) return res.status(404).json({ detail: 'Booking not found' })
-  if (req.body.status) b.status = req.body.status
-  res.json(b)
-})
-
-// ── MESSAGES ────────────────────────────────────────────
-const messages = []
-let msgId = 1
-
-app.get('/messages/:other_id', authMiddleware, (req, res) => {
-  const me = req.user.id
-  const other = parseInt(req.params.other_id)
-  res.json(messages.filter(m =>
-    (m.sender_id === me && m.receiver_id === other) ||
-    (m.sender_id === other && m.receiver_id === me)
-  ))
-})
-
-app.post('/messages', authMiddleware, (req, res) => {
-  const msg = {
-    id: msgId++, sender_id: req.user.id,
-    receiver_id: req.body.receiver_id,
-    content: req.body.content, is_read: false,
-    created_at: new Date().toISOString()
-  }
-  messages.push(msg)
-  res.status(201).json(msg)
-})
-
 // ── RAZORPAY PAYMENTS ───────────────────────────────────
-const payments = []
-let paymentId = 1
 
 // Tell the frontend whether Razorpay is set up + the public key id
 app.get('/payments/config', (req, res) => {
@@ -232,9 +237,9 @@ app.get('/payments/config', (req, res) => {
 })
 
 // Create a Razorpay order for a plan
-app.post('/payments/create-order', authMiddleware, async (req, res) => {
+app.post('/payments/create-order', paymentLimiter, authMiddleware, async (req, res) => {
   if (!razorpay)
-    return res.status(503).json({ detail: 'Payments are not configured yet. Add your Razorpay test keys in the server.' })
+    return res.status(503).json({ detail: 'Payments are not configured yet. Add your Razorpay keys in the server.' })
 
   const { amount, tier, grades } = req.body
   const rupees = parseInt(amount)
@@ -255,8 +260,8 @@ app.post('/payments/create-order', authMiddleware, async (req, res) => {
   }
 })
 
-// Verify the payment signature after checkout completes
-app.post('/payments/verify', authMiddleware, (req, res) => {
+// Verify the payment signature after checkout completes (browser-side confirmation path)
+app.post('/payments/verify', paymentLimiter, authMiddleware, async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, tier, price, grades } = req.body
 
   const expected = crypto
@@ -267,22 +272,22 @@ app.post('/payments/verify', authMiddleware, (req, res) => {
   if (expected !== razorpay_signature)
     return res.status(400).json({ detail: 'Payment verification failed.' })
 
-  const record = {
-    id: paymentId++, student_id: req.user.id,
+  const { payment, enrollment } = await recordPaidOrder({
+    student_id: req.user.id,
     order_id: razorpay_order_id, payment_id: razorpay_payment_id,
-    tier: tier || '', price: price || 0, grades: grades || '',
-    status: 'paid', created_at: new Date().toISOString(),
-  }
-  payments.push(record)
-  console.log('Payment verified:', record)
-  res.json({ ok: true, payment: record })
+    tier, price, grades, source: 'client',
+  })
+
+  res.json({ ok: true, payment, enrollment })
+})
+
+// Enrollments belonging to the logged-in student (server is the source of truth)
+app.get('/enrollments', authMiddleware, async (req, res) => {
+  res.json(await db.getEnrollmentsForUser(req.user.id))
 })
 
 // ── ENQUIRIES (contact form) ────────────────────────────
-const enquiries = []
-let enquiryId = 1
-
-app.post('/enquiries', (req, res) => {
+app.post('/enquiries', enquiryLimiter, async (req, res) => {
   const { name, email, phone, subject, grade, message, tutor } = req.body
 
   if (!name || name.trim().length < 2)
@@ -292,19 +297,17 @@ app.post('/enquiries', (req, res) => {
   if (!message || message.trim().length < 5)
     return res.status(422).json({ detail: 'Please enter a message.' })
 
-  const enquiry = {
-    id: enquiryId++,
+  const enquiry = await db.saveEnquiry({
     name: name.trim(), email, phone: phone || '',
     subject: subject || '', grade: grade || '',
     tutor: tutor || '', message: message.trim(),
     created_at: new Date().toISOString(),
-  }
-  enquiries.push(enquiry)
-  console.log('New enquiry received:', enquiry)
+  })
+  if (!isProd) console.log('New enquiry received:', enquiry)
   res.status(201).json({ ok: true, id: enquiry.id })
 })
 
-app.get('/enquiries', (req, res) => res.json(enquiries))
+app.get('/enquiries', async (req, res) => res.json(await db.getAllEnquiries()))
 
 // ── SPA FALLBACK ────────────────────────────────────────
 // Any non-API GET returns the React app so client-side routing works.
@@ -314,4 +317,9 @@ app.get('*', (req, res) => {
   res.status(404).json({ detail: 'Not found' })
 })
 
-app.listen(PORT, () => console.log(`RC Tutors server running on port ${PORT}`))
+db.connect()
+  .then(() => app.listen(PORT, () => console.log(`RC Tutors server running on port ${PORT}`)))
+  .catch((err) => {
+    console.error('Failed to connect to database:', err.message)
+    process.exit(1)
+  })

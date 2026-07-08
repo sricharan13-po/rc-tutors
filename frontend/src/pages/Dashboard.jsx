@@ -2,6 +2,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, Clock, CheckCircle, Trash2, Video } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import api from '../api/client'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -11,7 +12,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     setBookings(JSON.parse(localStorage.getItem('rc_bookings') || '[]'))
-    setEnrollments(JSON.parse(localStorage.getItem('rc_enrollments') || '[]'))
+    // Enrollments live on the server (tied to the account), not the browser —
+    // so a paid class shows up on any device the student logs into.
+    api.get('/enrollments').then((r) => setEnrollments(r.data)).catch(() => {})
   }, [])
 
   const cancelBooking = (id) => {
