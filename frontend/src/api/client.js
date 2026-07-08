@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: '/api' })
+// In dev, calls go through the Vite proxy at /api → localhost:8000.
+// In production the backend serves the frontend, so the API is same-origin at the root.
+const api = axios.create({ baseURL: import.meta.env.PROD ? '' : '/api' })
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')

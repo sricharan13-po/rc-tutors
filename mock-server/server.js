@@ -8,11 +8,18 @@ const path = require('path')
 const Razorpay = require('razorpay')
 
 const app = express()
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
+app.use(cors())
 app.use(express.json())
 
-const SECRET = 'rc-tutors-secret'
+const PORT = process.env.PORT || 8000
+const SECRET = process.env.JWT_SECRET || 'rc-tutors-secret'
 const DB_FILE = path.join(__dirname, 'db.json')
+
+// Serve the built React frontend (for single-service deployment)
+const CLIENT_DIST = path.join(__dirname, '..', 'frontend', 'dist')
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST))
+}
 
 // ── RAZORPAY KEYS ───────────────────────────────────────
 // 👉 PASTE YOUR RAZORPAY TEST KEYS HERE (from Razorpay Dashboard → Test Mode → API Keys).
@@ -38,7 +45,12 @@ function loadDB() {
 }
 
 function saveDB() {
-  fs.writeFileSync(DB_FILE, JSON.stringify({ users, nextId }, null, 2))
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify({ users, nextId }, null, 2))
+  } catch (e) {
+    // Some hosts have a read-only/ephemeral disk — keep running with in-memory data.
+    console.warn('Could not persist db.json:', e.message)
+  }
 }
 
 const db = loadDB()
@@ -294,4 +306,12 @@ app.post('/enquiries', (req, res) => {
 
 app.get('/enquiries', (req, res) => res.json(enquiries))
 
-app.listen(8000, () => console.log('RC Tutors mock server running on http://localhost:8000'))
+// ── SPA FALLBACK ────────────────────────────────────────
+// Any non-API GET returns the React app so client-side routing works.
+app.get('*', (req, res) => {
+  const indexFile = path.join(CLIENT_DIST, 'index.html')
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile)
+  res.status(404).json({ detail: 'Not found' })
+})
+
+app.listen(PORT, () => console.log(`RC Tutors server running on port ${PORT}`))

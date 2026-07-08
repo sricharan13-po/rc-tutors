@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: rc-tutors
+    env: node
+    plan: free
+    buildCommand: npm --prefix frontend install && npm --prefix frontend run build && npm --prefix mock-server install
+    startCommand: node mock-server/server.js
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      # Optional — add your Razorpay TEST keys to enable real checkout.
+      # Leave blank to keep payments in "not configured" (safe) mode.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
