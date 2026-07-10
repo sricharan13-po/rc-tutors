@@ -9,6 +9,7 @@ const fs = require('fs')
 const path = require('path')
 const Razorpay = require('razorpay')
 const db = require('./db')
+const googleMeet = require('./googleMeet')
 
 const app = express()
 app.set('trust proxy', 1) // needed on Render/most PaaS for rate-limit + secure cookies to see the real client IP
@@ -42,8 +43,8 @@ const razorpay = razorpayConfigured
   ? new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET })
   : null
 
-// Video classes run on Jitsi Meet. The room name is derived from a secret salt
-// so it can't be guessed from the class name — must match frontend/src/pages/Payment.jsx.
+// Fallback video room (used only until the tutor connects Google — see /admin/google/connect).
+// The room name is derived from a secret salt so it can't be guessed from the class name.
 const ROOM_SALT = process.env.ROOM_SALT || 'rc-tutors-9f83kd72ba-secret'
 function hashCode(str) {
   let h = 0
@@ -159,9 +160,17 @@ async function recordPaidOrder({ student_id, order_id, payment_id, tier, price, 
 
   let enrollment = null
   if (student_id) {
+    let meetLink
+    try {
+      meetLink = await googleMeet.getOrCreateMeetLink(tier)
+    } catch (err) {
+      console.error('Google Meet link creation failed, falling back to Jitsi:', err.message)
+    }
+    if (!meetLink) meetLink = classRoomUrl(tier) // Google not connected yet — safe fallback
+
     enrollment = await db.saveEnrollment({
       student_id, order_id, tier, price: Number(price) || 0, grades,
-      meetLink: classRoomUrl(tier),
+      meetLink,
       schedule: 'Monday – Friday · 5:10 PM – 6:10 PM',
       paidAt: new Date().toISOString(),
     })
@@ -227,6 +236,32 @@ app.get('/tutors/:id', (req, res) => {
   const tutor = DEFAULT_TUTORS.find(t => t.id === parseInt(req.params.id))
   if (!tutor) return res.status(404).json({ detail: 'Tutor not found' })
   res.json(tutor)
+})
+
+// ── GOOGLE MEET SETUP (tutor-only, one-time) ────────────
+// Protected by a static setup token (not a student/tutor login) since it's a
+// plain browser link, not an API call with an Authorization header.
+const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || ''
+
+app.get('/admin/google/connect', (req, res) => {
+  if (!ADMIN_SETUP_TOKEN || req.query.token !== ADMIN_SETUP_TOKEN)
+    return res.status(403).send('Forbidden.')
+  if (!googleMeet.googleConfigured)
+    return res.status(503).send('Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI first.')
+  res.redirect(googleMeet.getAuthUrl())
+})
+
+app.get('/admin/google/callback', async (req, res) => {
+  try {
+    await googleMeet.handleOAuthCallback(req.query.code)
+    res.send('<h2>Google account connected ✅</h2><p>Real Google Meet links will now be created automatically for every class. You can close this tab.</p>')
+  } catch (err) {
+    res.status(500).send(`<h2>Connection failed</h2><p>${err.message}</p>`)
+  }
+})
+
+app.get('/admin/google/status', async (req, res) => {
+  res.json({ configured: googleMeet.googleConfigured, connected: await googleMeet.isGoogleConnected() })
 })
 
 // ── RAZORPAY PAYMENTS ───────────────────────────────────

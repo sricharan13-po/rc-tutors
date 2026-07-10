@@ -26,3 +26,15 @@ services:
       # Lock the API to your real domain once you have one, e.g. https://rctutors.com
       - key: CORS_ORIGIN
         sync: false
+      # Google Calendar API — auto-generates a real Google Meet link per class.
+      # See README "Google Meet setup" for how to get these.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      # A password you make up yourself, used once to protect the one-time
+      # /admin/google/connect link (not a student/tutor login).
+      - key: ADMIN_SETUP_TOKEN
+        sync: false

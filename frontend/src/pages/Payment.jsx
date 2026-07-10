@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { Lock, CheckCircle, ChevronLeft, Video, Calendar, Clock, AlertCircle } from 'lucide-react'
+import { Lock, CheckCircle, ChevronLeft, Calendar, Clock, AlertCircle } from 'lucide-react'
+import GoogleMeetIcon from '../components/GoogleMeetIcon'
 
 // Load the Razorpay checkout script once
 function loadRazorpayScript() {
@@ -104,7 +105,7 @@ export default function Payment() {
               <Clock size={15} className="text-primary shrink-0" /> 5:10 PM – 6:10 PM
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Video size={15} className="text-primary shrink-0" /> Online video class — no app or sign-in needed
+              <GoogleMeetIcon size={15} className="shrink-0" /> Class runs on Google Meet
             </div>
           </div>
 
@@ -112,9 +113,9 @@ export default function Payment() {
             href={meetLink}
             target="_blank"
             rel="noreferrer"
-            className="w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-xl font-medium hover:bg-green-600 transition-colors mb-3"
+            className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors mb-3 shadow-sm"
           >
-            <Video size={18} /> Join Video Class
+            <GoogleMeetIcon size={20} /> Join on Google Meet
           </a>
           <button
             onClick={() => navigate('/dashboard')}

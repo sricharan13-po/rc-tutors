@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, Clock, CheckCircle, Trash2, Video } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import GoogleMeetIcon from '../components/GoogleMeetIcon'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -50,9 +51,9 @@ export default function Dashboard() {
                   href={en.meetLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 bg-green-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-green-600 transition-colors shrink-0"
+                  className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shrink-0 shadow-sm"
                 >
-                  <Video size={16} /> Join Class
+                  <GoogleMeetIcon size={18} /> Join on Meet
                 </a>
               </div>
             ))}

@@ -11,7 +11,7 @@ A tutoring-services web app for grades 1–6. Parents can browse the tutor, view
 - **Frontend:** React + Vite + TailwindCSS + React Query + React Router
 - **Backend (mock):** Node.js + Express + JWT + bcryptjs
 - **Payments:** Razorpay checkout (test mode)
-- **Video classes:** Jitsi Meet (no account/app needed)
+- **Video classes:** Real Google Meet links, auto-created via the Google Calendar API (falls back to Jitsi Meet until the tutor's Google account is connected)
 - **Contact:** WhatsApp click-to-chat
 
 > A FastAPI Python backend also exists under `backend/` but is not used (incompatible with Python 3.14). The Node mock server in `mock-server/` is the active backend.
@@ -43,6 +43,31 @@ Set these on your host (or in a local `.env` you export before running `node ser
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | For payments | From Razorpay Dashboard → API Keys. Test keys (`rzp_test_...`) work immediately; live keys (`rzp_live_...`) need KYC approval. |
 | `RAZORPAY_WEBHOOK_SECRET` | For production | From Razorpay Dashboard → Settings → Webhooks (see below). |
 | `CORS_ORIGIN` | Optional | Restricts the API to your domain, e.g. `https://rctutors.com`. Defaults to allow all. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | For real Google Meet links | From Google Cloud Console (see "Google Meet setup" below). Without these, classes use a private Jitsi Meet room instead. |
+| `ADMIN_SETUP_TOKEN` | For real Google Meet links | A password you invent yourself, used once to authorize the `/admin/google/connect` link. |
+
+## Google Meet setup (auto-generated real Meet links)
+
+By default, every class gets a private Jitsi Meet room (free, no setup). To use **real Google Meet links** instead — auto-created on your own Google Calendar — connect your Google account once:
+
+1. Go to **[Google Cloud Console](https://console.cloud.google.com/)** → create a project (any name, e.g. "RC Tutors").
+2. **APIs & Services → Library** → search **Google Calendar API** → **Enable**.
+3. **APIs & Services → OAuth consent screen** → User Type **External** → fill in the app name/email → **Save**. Under **Test users**, add your own Google account's email. (Because this stays in "Testing" mode with only you as a test user, Google's app-review process — which is only required for public-facing apps — doesn't apply here.)
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → Application type **Web application**.
+   - Under **Authorized redirect URIs**, add: `http://localhost:8000/admin/google/callback` for local testing, and `https://<your-render-url>/admin/google/callback` for production.
+   - Copy the **Client ID** and **Client Secret**.
+5. Set the environment variables:
+   - `GOOGLE_CLIENT_ID` — the client ID from step 4
+   - `GOOGLE_CLIENT_SECRET` — the client secret from step 4
+   - `GOOGLE_REDIRECT_URI` — the exact redirect URI you registered (must match exactly)
+   - `ADMIN_SETUP_TOKEN` — any password you invent, e.g. `letmein-2026`
+6. Restart the server, then visit (in your own browser, while logged into the Google account you want classes booked under):
+   ```
+   https://<your-domain>/admin/google/connect?token=<your ADMIN_SETUP_TOKEN>
+   ```
+   Approve the Google consent screen. You'll see "Google account connected ✅".
+
+From then on, every paid enrollment automatically gets a real `meet.google.com` link (one persistent link per class tier, also added to your Google Calendar with Mon–Fri reminders) instead of the Jitsi fallback.
 
 ## Going to Production (real payments)
 

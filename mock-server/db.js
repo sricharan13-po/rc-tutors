@@ -27,6 +27,13 @@ const enquirySchema = new mongoose.Schema({
   subject: String, grade: String, tutor: String, message: String, created_at: String,
 })
 const counterSchema = new mongoose.Schema({ name: { type: String, unique: true }, value: Number })
+// One durable Google Meet room per class tier — created once, reused by every student in that class.
+const meetRoomSchema = new mongoose.Schema({
+  tier: { type: String, unique: true, index: true },
+  meetLink: String, calendarEventId: String,
+})
+// Single-row store for the tutor's Google OAuth refresh token (one tutor, one Google account).
+const configSchema = new mongoose.Schema({ key: { type: String, unique: true }, value: String })
 
 let Models = null
 if (useMongo) {
@@ -36,6 +43,8 @@ if (useMongo) {
     Enrollment: mongoose.model('Enrollment', enrollmentSchema),
     Enquiry: mongoose.model('Enquiry', enquirySchema),
     Counter: mongoose.model('Counter', counterSchema),
+    MeetRoom: mongoose.model('MeetRoom', meetRoomSchema),
+    Config: mongoose.model('Config', configSchema),
   }
 }
 
@@ -67,6 +76,8 @@ const mem = loadFile()
 mem.payments = mem.payments || []
 mem.enrollments = mem.enrollments || []
 mem.enquiries = mem.enquiries || []
+mem.meetRooms = mem.meetRooms || {} // tier -> { meetLink, calendarEventId }
+mem.config = mem.config || {} // key -> value (e.g. google refresh token)
 
 function saveFile() {
   try {
@@ -154,10 +165,42 @@ async function getAllEnquiries() {
   return mem.enquiries
 }
 
+// ── GOOGLE MEET ROOMS (one per class tier, reused across enrollments) ──
+async function getMeetRoom(tier) {
+  if (useMongo) return Models.MeetRoom.findOne({ tier }).lean()
+  return mem.meetRooms[tier] ? { tier, ...mem.meetRooms[tier] } : null
+}
+
+async function saveMeetRoom(tier, { meetLink, calendarEventId }) {
+  if (useMongo) {
+    await Models.MeetRoom.findOneAndUpdate({ tier }, { tier, meetLink, calendarEventId }, { upsert: true })
+    return
+  }
+  mem.meetRooms[tier] = { meetLink, calendarEventId }
+  saveFile()
+}
+
+// ── CONFIG (single tutor's Google OAuth refresh token) ──────
+async function getConfig(key) {
+  if (useMongo) return (await Models.Config.findOne({ key }).lean())?.value ?? null
+  return mem.config[key] ?? null
+}
+
+async function setConfig(key, value) {
+  if (useMongo) {
+    await Models.Config.findOneAndUpdate({ key }, { key, value }, { upsert: true })
+    return
+  }
+  mem.config[key] = value
+  saveFile()
+}
+
 module.exports = {
   useMongo, connect,
   findUserByEmail, findUserById, createUser,
   findPaymentByOrderId, savePayment,
   saveEnrollment, getEnrollmentsForUser,
   saveEnquiry, getAllEnquiries,
+  getMeetRoom, saveMeetRoom,
+  getConfig, setConfig,
 }
