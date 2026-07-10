@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
@@ -43,7 +44,13 @@ const razorpay = razorpayConfigured
   ? new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET })
   : null
 
-// Fallback video room (used only until the tutor connects Google — see /admin/google/connect).
+// ── VIDEO CLASS LINK ─────────────────────────────────────
+// Simplest path: one shared Google Meet link for all classes. Create it once at
+// meet.google.com ("New meeting" → "Create a meeting for later") and set it here.
+// This takes priority over everything else when set.
+const GOOGLE_MEET_LINK = process.env.GOOGLE_MEET_LINK || ''
+
+// Fallback video room (used only if no GOOGLE_MEET_LINK and Google isn't connected).
 // The room name is derived from a secret salt so it can't be guessed from the class name.
 const ROOM_SALT = process.env.ROOM_SALT || 'rc-tutors-9f83kd72ba-secret'
 function hashCode(str) {
@@ -160,13 +167,15 @@ async function recordPaidOrder({ student_id, order_id, payment_id, tier, price, 
 
   let enrollment = null
   if (student_id) {
-    let meetLink
-    try {
-      meetLink = await googleMeet.getOrCreateMeetLink(tier)
-    } catch (err) {
-      console.error('Google Meet link creation failed, falling back to Jitsi:', err.message)
+    let meetLink = GOOGLE_MEET_LINK // one shared Google Meet link for all classes, if set
+    if (!meetLink) {
+      try {
+        meetLink = await googleMeet.getOrCreateMeetLink(tier)
+      } catch (err) {
+        console.error('Google Meet link creation failed, falling back to Jitsi:', err.message)
+      }
     }
-    if (!meetLink) meetLink = classRoomUrl(tier) // Google not connected yet — safe fallback
+    if (!meetLink) meetLink = classRoomUrl(tier) // final safe fallback
 
     enrollment = await db.saveEnrollment({
       student_id, order_id, tier, price: Number(price) || 0, grades,

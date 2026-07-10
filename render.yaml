@@ -26,8 +26,14 @@ services:
       # Lock the API to your real domain once you have one, e.g. https://rctutors.com
       - key: CORS_ORIGIN
         sync: false
-      # Google Calendar API — auto-generates a real Google Meet link per class.
-      # See README "Google Meet setup" for how to get these.
+      # SIMPLE option: one shared Google Meet link for all classes. Create it at
+      # meet.google.com ("Create a meeting for later") and paste it here. Takes
+      # priority over the Google Calendar API option below.
+      - key: GOOGLE_MEET_LINK
+        sync: false
+      # ADVANCED option: Google Calendar API auto-generates a real Meet link per
+      # class. Needs an 18+ Google account (Google Cloud has an age requirement).
+      # See README "Google Meet setup". Leave blank if using GOOGLE_MEET_LINK above.
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
