@@ -20,9 +20,11 @@ const SECRET = process.env.JWT_SECRET || 'rc-tutors-secret'
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'
 const isProd = process.env.NODE_ENV === 'production'
 
-// Fixed admin account. Override via env; defaults let it work out of the box.
+// Fixed admin account. The real password MUST come from the ADMIN_PASSWORD env var
+// (set it in your host + local .env). The placeholder below is intentionally not a
+// usable secret, so this file is safe to keep in a public repo.
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@rctutors.com').toLowerCase()
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'RCtutors@Admin2026'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'CHANGE_ME_set_ADMIN_PASSWORD_env'
 const ADMIN_NAME = process.env.ADMIN_NAME || 'RC Tutors Admin'
 
 app.use(helmet({ contentSecurityPolicy: false }))
@@ -401,6 +403,9 @@ app.get('*', (req, res) => {
 })
 
 async function seedAdmin() {
+  if (!process.env.ADMIN_PASSWORD) {
+    console.warn('⚠️  ADMIN_PASSWORD is not set — set it as an env var so admin login is secure.')
+  }
   const hash = await bcrypt.hash(ADMIN_PASSWORD, 10)
   await db.ensureAdmin({ name: ADMIN_NAME, email: ADMIN_EMAIL, password_hash: hash })
   console.log(`Admin account ready: ${ADMIN_EMAIL}`)
