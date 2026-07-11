@@ -27,8 +27,8 @@ export default function Login() {
     setServerError('')
     setLoading(true)
     try {
-      await login(form.email, form.password)
-      navigate('/dashboard')
+      const u = await login(form.email, form.password)
+      navigate(u.role === 'admin' ? '/admin' : '/dashboard')
     } catch (err) {
       setServerError(err.response?.data?.detail || 'Something went wrong. Please try again.')
     } finally {

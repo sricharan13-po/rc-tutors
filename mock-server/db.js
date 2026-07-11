@@ -148,6 +148,43 @@ async function getEnrollmentsForUser(student_id) {
   return mem.enrollments.filter(e => e.student_id === student_id)
 }
 
+// ── ADMIN VIEWS (all records) ────────────────────────────
+async function getAllPayments() {
+  if (useMongo) return Models.Payment.find().sort({ id: -1 }).lean()
+  return [...mem.payments].reverse()
+}
+
+async function getAllEnrollments() {
+  if (useMongo) return Models.Enrollment.find().sort({ id: -1 }).lean()
+  return [...mem.enrollments].reverse()
+}
+
+// Keep every student on the current shared link when the admin changes it.
+async function setAllEnrollmentsMeetLink(meetLink) {
+  if (useMongo) { await Models.Enrollment.updateMany({}, { meetLink }); return }
+  mem.enrollments.forEach(e => { e.meetLink = meetLink })
+  saveFile()
+}
+
+// Create the admin account if missing, or keep its password/role in sync with config.
+async function ensureAdmin({ name, email, password_hash }) {
+  if (useMongo) {
+    await Models.User.findOneAndUpdate(
+      { email },
+      { $set: { name, password_hash, role: 'admin' }, $setOnInsert: { id: await nextSeq('users'), created_at: new Date().toISOString() } },
+      { upsert: true }
+    )
+    return
+  }
+  const existing = mem.users.find(u => u.email === email)
+  if (existing) {
+    existing.name = name; existing.password_hash = password_hash; existing.role = 'admin'
+  } else {
+    mem.users.push({ id: mem.nextId++, name, email, password_hash, role: 'admin', created_at: new Date().toISOString() })
+  }
+  saveFile()
+}
+
 async function saveEnquiry(record) {
   if (useMongo) {
     record.id = await nextSeq('enquiries')
@@ -197,9 +234,9 @@ async function setConfig(key, value) {
 
 module.exports = {
   useMongo, connect,
-  findUserByEmail, findUserById, createUser,
-  findPaymentByOrderId, savePayment,
-  saveEnrollment, getEnrollmentsForUser,
+  findUserByEmail, findUserById, createUser, ensureAdmin,
+  findPaymentByOrderId, savePayment, getAllPayments,
+  saveEnrollment, getEnrollmentsForUser, getAllEnrollments, setAllEnrollmentsMeetLink,
   saveEnquiry, getAllEnquiries,
   getMeetRoom, saveMeetRoom,
   getConfig, setConfig,

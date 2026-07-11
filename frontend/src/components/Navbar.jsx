@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, LogOut, User, MessageSquare, LayoutDashboard } from 'lucide-react'
+import { BookOpen, LogOut, User, MessageSquare, LayoutDashboard, Shield } from 'lucide-react'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -32,9 +32,15 @@ export default function Navbar() {
 
           {user ? (
             <>
-              <Link to="/dashboard" className="text-gray-600 hover:text-primary transition-colors flex items-center gap-1">
-                <LayoutDashboard size={16} /> Dashboard
-              </Link>
+              {user.role === 'admin' ? (
+                <Link to="/admin" className="text-gray-600 hover:text-primary transition-colors flex items-center gap-1">
+                  <Shield size={16} /> Admin
+                </Link>
+              ) : (
+                <Link to="/dashboard" className="text-gray-600 hover:text-primary transition-colors flex items-center gap-1">
+                  <LayoutDashboard size={16} /> Dashboard
+                </Link>
+              )}
               <div className="flex items-center gap-2 text-sm text-gray-700">
                 <User size={16} />
                 <span>{user.name}</span>

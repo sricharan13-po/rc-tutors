@@ -20,6 +20,11 @@ const SECRET = process.env.JWT_SECRET || 'rc-tutors-secret'
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*'
 const isProd = process.env.NODE_ENV === 'production'
 
+// Fixed admin account. Override via env; defaults let it work out of the box.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@rctutors.com').toLowerCase()
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'RCtutors@Admin2026'
+const ADMIN_NAME = process.env.ADMIN_NAME || 'RC Tutors Admin'
+
 app.use(helmet({ contentSecurityPolicy: false }))
 app.use(cors({ origin: CORS_ORIGIN }))
 
@@ -154,6 +159,11 @@ async function authMiddleware(req, res, next) {
   }
 }
 
+function adminOnly(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ detail: 'Admin access only.' })
+  next()
+}
+
 // Shared by /payments/verify (browser) and /payments/webhook (Razorpay server).
 // Idempotent on order_id so a payment is never recorded — or enrolled — twice.
 async function recordPaidOrder({ student_id, order_id, payment_id, tier, price, grades, source }) {
@@ -167,7 +177,8 @@ async function recordPaidOrder({ student_id, order_id, payment_id, tier, price, 
 
   let enrollment = null
   if (student_id) {
-    let meetLink = GOOGLE_MEET_LINK // one shared Google Meet link for all classes, if set
+    // Priority: admin-set link → GOOGLE_MEET_LINK env → Calendar API → Jitsi fallback
+    let meetLink = (await db.getConfig('meet_link')) || GOOGLE_MEET_LINK
     if (!meetLink) {
       try {
         meetLink = await googleMeet.getOrCreateMeetLink(tier)
@@ -203,8 +214,10 @@ app.post('/auth/register', authLimiter, async (req, res) => {
   if (await db.findUserByEmail(email))
     return res.status(400).json({ detail: 'An account with this email already exists.' })
 
+  // Never let the public self-assign admin — only student/tutor via signup.
+  const safeRole = role === 'tutor' ? 'tutor' : 'student'
   const hash = await bcrypt.hash(password, 10)
-  const user = await db.createUser({ name: name.trim(), email, password_hash: hash, role: role || 'student' })
+  const user = await db.createUser({ name: name.trim(), email, password_hash: hash, role: safeRole })
 
   const token = makeToken(user)
   res.status(201).json({ access_token: token, token_type: 'bearer', user: userOut(user) })
@@ -351,7 +364,33 @@ app.post('/enquiries', enquiryLimiter, async (req, res) => {
   res.status(201).json({ ok: true, id: enquiry.id })
 })
 
-app.get('/enquiries', async (req, res) => res.json(await db.getAllEnquiries()))
+// ── ADMIN ────────────────────────────────────────────────
+// Everything a student pays for, everyone who enquired — one screen for the tutor.
+app.get('/admin/overview', authMiddleware, adminOnly, async (req, res) => {
+  const [enquiries, enrollments, payments] = await Promise.all([
+    db.getAllEnquiries(), db.getAllEnrollments(), db.getAllPayments(),
+  ])
+  res.json({ enquiries, enrollments, payments })
+})
+
+// Current shared Google Meet link (what new/updated enrollments use)
+app.get('/admin/meet-link', authMiddleware, adminOnly, async (req, res) => {
+  const meetLink = (await db.getConfig('meet_link')) || GOOGLE_MEET_LINK || ''
+  res.json({ meetLink })
+})
+
+// Change the shared Google Meet link; existing students move to the new room too.
+app.put('/admin/meet-link', authMiddleware, adminOnly, async (req, res) => {
+  const link = (req.body.meetLink || '').trim()
+  if (link && !/^https:\/\/meet\.google\.com\/[a-z-]+$/i.test(link))
+    return res.status(422).json({ detail: 'Enter a valid Google Meet link, e.g. https://meet.google.com/abc-defg-hij' })
+  await db.setConfig('meet_link', link)
+  await db.setAllEnrollmentsMeetLink(link)
+  res.json({ ok: true, meetLink: link })
+})
+
+// ── ENQUIRIES (admin read) ───────────────────────────────
+app.get('/enquiries', authMiddleware, adminOnly, async (req, res) => res.json(await db.getAllEnquiries()))
 
 // ── SPA FALLBACK ────────────────────────────────────────
 // Any non-API GET returns the React app so client-side routing works.
@@ -361,9 +400,16 @@ app.get('*', (req, res) => {
   res.status(404).json({ detail: 'Not found' })
 })
 
+async function seedAdmin() {
+  const hash = await bcrypt.hash(ADMIN_PASSWORD, 10)
+  await db.ensureAdmin({ name: ADMIN_NAME, email: ADMIN_EMAIL, password_hash: hash })
+  console.log(`Admin account ready: ${ADMIN_EMAIL}`)
+}
+
 db.connect()
+  .then(seedAdmin)
   .then(() => app.listen(PORT, () => console.log(`RC Tutors server running on port ${PORT}`)))
   .catch((err) => {
-    console.error('Failed to connect to database:', err.message)
+    console.error('Startup failed:', err.message)
     process.exit(1)
   })

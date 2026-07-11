@@ -10,11 +10,19 @@ import Contact from './pages/Contact'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Payment from './pages/Payment'
+import Admin from './pages/Admin'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="text-center py-20 text-gray-400">Loading...</div>
   return user ? children : <Navigate to="/login" replace />
+}
+
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="text-center py-20 text-gray-400">Loading...</div>
+  if (!user) return <Navigate to="/login" replace />
+  return user.role === 'admin' ? children : <Navigate to="/dashboard" replace />
 }
 
 function AppRoutes() {
@@ -31,6 +39,7 @@ function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
       </Routes>
     </>
   )
