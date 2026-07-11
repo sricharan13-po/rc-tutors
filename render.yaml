@@ -10,9 +10,10 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      # Persistent database (MongoDB Atlas free tier). Without this, data resets
-      # whenever the free instance restarts. See README for setup steps.
-      - key: MONGO_URI
+      # Persistent database — Supabase (or any Postgres) connection string.
+      # Without this, data resets whenever the free instance restarts.
+      # Get it from Supabase → Project Settings → Database → Connection string (URI).
+      - key: DATABASE_URL
         sync: false
       # Razorpay keys — use rzp_live_... keys only once your account is approved
       # for Live Mode. Test keys (rzp_test_...) are fine for trying things out.
