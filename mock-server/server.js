@@ -109,6 +109,13 @@ app.post('/payments/webhook', express.raw({ type: '*/*' }), async (req, res) => 
 
 app.use(express.json())
 
+// Safety net: if the frontend ever calls /api/* (e.g. dev-mode base URL slips
+// into a build), strip the prefix so it still hits the real routes.
+app.use((req, res, next) => {
+  if (req.url === '/api' || req.url.startsWith('/api/')) req.url = req.url.slice(4) || '/'
+  next()
+})
+
 // ── RATE LIMITING ────────────────────────────────────────
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false })
 const paymentLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false })
