@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, Mail, Lock, User, AlertCircle, GraduationCap } from 'lucide-react'
+import { Mail, Lock, User, AlertCircle, GraduationCap } from 'lucide-react'
+import Logo from '../components/Logo'
 
 export default function Register() {
   const { register } = useAuth()
@@ -59,7 +60,7 @@ export default function Register() {
 
         {/* Logo */}
         <div className="flex items-center gap-2 text-primary font-bold text-xl mb-2 justify-center">
-          <BookOpen size={24} /> RC Tutors
+          <Logo size={28} /> RC Tutors
         </div>
         <h1 className="text-2xl font-bold text-gray-800 mb-1 text-center">Create an account</h1>
         <p className="text-gray-400 text-sm text-center mb-6">Join RC Tutors today</p>

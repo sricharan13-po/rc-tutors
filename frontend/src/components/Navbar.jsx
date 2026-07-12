@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { BookOpen, LogOut, User, MessageSquare, LayoutDashboard, Shield } from 'lucide-react'
+import { LogOut, User, MessageSquare, LayoutDashboard, Shield } from 'lucide-react'
+import Logo from './Logo'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -15,7 +16,7 @@ export default function Navbar() {
     <nav className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 text-primary font-bold text-xl">
-          <BookOpen size={24} />
+          <Logo size={30} />
           RC Tutors
         </Link>
 
