@@ -3,7 +3,7 @@ services:
     name: rc-tutors
     env: node
     plan: free
-    buildCommand: npm --prefix frontend install && npm --prefix frontend run build && npm --prefix mock-server install
+    buildCommand: npm --prefix frontend install --include=dev && npm --prefix frontend run build && npm --prefix mock-server install
     startCommand: node mock-server/server.js
     envVars:
       - key: NODE_ENV
