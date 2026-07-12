@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Mail, Lock, AlertCircle } from 'lucide-react'
+import { Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import Logo from '../components/Logo'
 
 export default function Login() {
@@ -11,6 +11,7 @@ export default function Login() {
   const [errors, setErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPw, setShowPw] = useState(false)
 
   const validate = () => {
     const e = {}
@@ -87,12 +88,20 @@ export default function Login() {
             <div className="relative">
               <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
-                type="password"
+                type={showPw ? 'text' : 'password'}
                 placeholder="••••••••"
                 {...field('password')}
-                className={`w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 transition
+                className={`w-full pl-9 pr-10 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 transition
                   ${errors.password ? 'border-red-400 focus:ring-red-200' : 'border-gray-200 focus:ring-primary/30'}`}
               />
+              <button
+                type="button"
+                onClick={() => setShowPw((s) => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
             {errors.password && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.password}</p>}
           </div>
