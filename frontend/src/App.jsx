@@ -11,6 +11,10 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Payment from './pages/Payment'
 import Admin from './pages/Admin'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import Terms from './pages/Terms'
+import RefundPolicy from './pages/RefundPolicy'
+import Footer from './components/Footer'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -40,7 +44,11 @@ function AppRoutes() {
         <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/refund" element={<RefundPolicy />} />
       </Routes>
+      <Footer />
     </>
   )
 }
