@@ -18,6 +18,10 @@ const DEFAULT_TUTORS = {
     id: 'default-1', name: 'Sricharan Vasireddy', email: 'sricharan@rctutors.com', avatar_url: null,
     profile: { subjects: ['Math', 'Science', 'Writing', 'Finance', 'French'], grades: [1,2,3,4,5,6], bio: 'Passionate educator with expertise in Math, Science, Writing, Finance and French for grades 1–6. Making learning fun with real-world examples and interactive problem-solving.', hourly_rate: 0, availability: AVAILABILITY },
   },
+  'default-2': {
+    id: 'default-2', name: 'Parvaresh', email: 'parvaresh@rctutors.com', avatar_url: null,
+    profile: { subjects: ['English', 'Writing', 'Finance'], grades: [1,2,3,4,5,6], bio: 'Dedicated tutor for English, Writing and Finance, grades 1–6. Builds strong reading and communication skills, confident writing, and money-smarts explained simply — with plenty of encouragement.', hourly_rate: 0, availability: AVAILABILITY },
+  },
 }
 
 const BATCHES = [

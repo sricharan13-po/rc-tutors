@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Star, Clock, Shield } from 'lucide-react'
 
-const SUBJECTS = ['Math', 'Science', 'Writing', 'Finance', 'French']
+const SUBJECTS = ['Math', 'Science', 'English', 'Writing', 'Finance', 'French']
 const GRADES = [1, 2, 3, 4, 5, 6]
 
 export default function Landing() {

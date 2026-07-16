@@ -142,6 +142,27 @@ const DEFAULT_TUTORS = [
         Fri: ['17:10','19:20'],
       }
     }
+  },
+  {
+    id: 102,
+    name: 'Parvaresh',
+    email: 'parvaresh@rctutors.com',
+    avatar_url: null,
+    profile: {
+      id: 2, user_id: 102,
+      subjects: ['English', 'Writing', 'Finance'],
+      grades: [1, 2, 3, 4, 5, 6],
+      bio: 'Dedicated tutor for English, Writing and Finance, grades 1–6. Builds strong reading and communication skills, confident writing, and money-smarts explained simply — with plenty of encouragement.',
+      hourly_rate: 40,
+      rating: 0, review_count: 0,
+      availability: {
+        Mon: ['17:10','19:20'],
+        Tue: ['17:10','19:20'],
+        Wed: ['17:10','19:20'],
+        Thu: ['17:10','19:20'],
+        Fri: ['17:10','19:20'],
+      }
+    }
   }
 ]
 

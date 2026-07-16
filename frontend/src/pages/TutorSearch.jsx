@@ -5,8 +5,16 @@ import api from '../api/client'
 import TutorCard from '../components/TutorCard'
 import { SlidersHorizontal } from 'lucide-react'
 
-const SUBJECTS = ['Math', 'Science', 'Writing', 'Finance', 'French']
+const SUBJECTS = ['Math', 'Science', 'English', 'Writing', 'Finance', 'French']
 const GRADES = [1, 2, 3, 4, 5, 6]
+
+const AVAILABILITY = {
+  Mon: ['17:10', '19:20'],
+  Tue: ['17:10', '19:20'],
+  Wed: ['17:10', '19:20'],
+  Thu: ['17:10', '19:20'],
+  Fri: ['17:10', '19:20'],
+}
 
 const DEFAULT_TUTORS = [
   {
@@ -18,14 +26,19 @@ const DEFAULT_TUTORS = [
       grades: [1, 2, 3, 4, 5, 6],
       bio: 'Passionate educator with expertise in Math, Science, Writing, Finance and French for grades 1–6. Making learning fun with real-world examples and interactive problem-solving.',
       hourly_rate: 40,
-      rating: 5.0,
-      availability: {
-        Mon: ['17:10', '19:20'],
-        Tue: ['17:10', '19:20'],
-        Wed: ['17:10', '19:20'],
-        Thu: ['17:10', '19:20'],
-        Fri: ['17:10', '19:20'],
-      },
+      availability: AVAILABILITY,
+    },
+  },
+  {
+    id: 'default-2',
+    name: 'Parvaresh',
+    avatar_url: null,
+    profile: {
+      subjects: ['English', 'Writing', 'Finance'],
+      grades: [1, 2, 3, 4, 5, 6],
+      bio: 'Dedicated tutor for English, Writing and Finance, grades 1–6. Builds strong reading and communication skills, confident writing, and money-smarts explained simply — with plenty of encouragement.',
+      hourly_rate: 40,
+      availability: AVAILABILITY,
     },
   },
 ]

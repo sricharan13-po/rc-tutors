@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { Mail, User, Phone, BookOpen, GraduationCap, MessageSquare, AlertCircle, CheckCircle, Send } from 'lucide-react'
 
-const SUBJECTS = ['Math', 'Science', 'Writing', 'Finance', 'French']
+const SUBJECTS = ['Math', 'Science', 'English', 'Writing', 'Finance', 'French']
 const GRADES = [1, 2, 3, 4, 5, 6]
 
 // RC Tutors WhatsApp number (India +91)
